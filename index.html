@@ -60,7 +60,7 @@ select{width:100%;min-height:46px;border:1.5px solid var(--line);border-radius:1
 .segs{display:flex;height:12px;border-radius:99px;overflow:hidden;gap:2px}
 .segs i{display:block;height:100%}.segs .run{background:var(--accent)}.segs .walk{background:var(--walk)}.segs .warm,.segs .cool{background:#F6B48F}
 .face{border-radius:30px;padding:18px 16px;text-align:center;display:flex;flex-direction:column;gap:6px;align-items:center}
-.face.run{background:var(--accent);color:var(--on-accent)}.face.walk{background:var(--sunk)}.face.warm,.face.cool{background:var(--peach-soft)}
+.face.run{background:var(--accent);color:var(--on-accent)}.face.fast{background:#E26C59;color:#fff}.segs .fast{background:#E26C59}.face.walk{background:var(--sunk)}.face.warm,.face.cool{background:var(--peach-soft)}
 .what{font-family:var(--f-display);font-weight:800;font-size:clamp(1.9rem,9vw,2.8rem);line-height:1}
 .clock{font-family:var(--f-display);font-weight:800;font-size:clamp(4rem,22vw,6.5rem);line-height:.9}
 .nx{font-size:.95rem;opacity:.9}
@@ -95,6 +95,7 @@ const WEEKS=[
 const NW=WEEKS.length, SN={r1:"Corsa 1",r2:"Corsa 2",r3:"Corsa lunga",free:"Corsa libera"};
 function fdur(s){const m=Math.floor(s/60),r=s%60;return m?(m+"′"+(r?r+"″":"")):r+"″"}
 function spec(w,k){
+  const PS=P.get("s");if(PS&&k!=="free"){const M={W:"warm",r:"run",w:"walk",c:"cool",f:"fast"},segs=PS.split(".").map(x=>({t:M[x[0]],s:+x.slice(1)})).filter(x=>x.t&&x.s>0);if(segs.length)return {title:P.get("t")||"Corsa",d:segs.slice(1,-1).map(x=>fdur(x.s)+(x.t==="walk"?" cammino":x.t==="fast"?" veloce":" corsa")).join(" + "),segs};}
   if(k==="free")return {title:"Corsa libera",d:"Senza piano: il timer conta e basta",segs:[{t:'run',s:4*3600}],free:true};
   const W=WEEKS[Math.min(Math.max(w,0),NW-1)],bl=k==="r1"?W.A:k==="r2"?W.B:W.C,seg=[];
   bl.forEach(b=>{for(let i=0;i<b.n;i++)b.steps.forEach(x=>seg.push({t:x.t,s:x.s}))});
@@ -135,8 +136,8 @@ let AC=null;
 function audio(){try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();if(AC.state==="suspended")AC.resume()}catch(e){}}
 function beep(n=2){try{for(let i=0;i<n;i++){const o=AC.createOscillator(),g=AC.createGain();o.frequency.value=880;o.connect(g);g.connect(AC.destination);const t=AC.currentTime+i*.25;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.45,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+.18);o.start(t);o.stop(t+.2)}}catch(e){}try{navigator.vibrate&&navigator.vibrate([200,100,200])}catch(e){}}
 function say(t){try{if(!window.speechSynthesis)return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang="it-IT";u.rate=1;speechSynthesis.speak(u)}catch(e){}}
-const LBL={warm:"Riscaldamento",run:"Corri piano",walk:"Cammina",cool:"Defaticamento"};
-const VOICE={warm:"Riscaldamento: cammina veloce per",run:"Corri, ritmo facile, per",walk:"Cammina per",cool:"Defaticamento: cammina per"};
+const LBL={warm:"Riscaldamento",run:"Corri piano",walk:"Cammina",cool:"Defaticamento",fast:"Ritmo sostenuto"};
+const VOICE={warm:"Riscaldamento: cammina veloce per",run:"Corri, ritmo facile, per",walk:"Cammina per",cool:"Defaticamento: cammina per",fast:"Ritmo sostenuto per"};
 function vdur(s){const m=Math.floor(s/60),r=s%60;return (m?m+(m===1?" minuto":" minuti"):"")+(m&&r?" e ":"")+(r?r+" secondi":"")}
 
 /* ===== GPS ===== */
@@ -241,12 +242,12 @@ function finish(){
 }
 function payload(){
   const r=RUN,segs=r.segs.map((x,i)=>({t:x.t,s:Math.round(r.segSec[i]),km:Math.round(r.segKm[i]*1000)/1000})).filter(x=>x.s>0);
-  const runS=segs.filter(x=>x.t==="run"),rs=runS.reduce((a,x)=>a+x.s,0),rk=runS.reduce((a,x)=>a+x.km,0);
+  const runS=segs.filter(x=>x.t==="run"||x.t==="fast"),rs=runS.reduce((a,x)=>a+x.s,0),rk=runS.reduce((a,x)=>a+x.km,0);
   const step=Math.max(1,Math.ceil(r.pts.length/400)),track=r.pts.filter((_,i)=>i%step===0||i===r.pts.length-1).map(p=>[+p[0].toFixed(5),+p[1].toFixed(5)]);
   const st=new Date(r.startedAt),km=Math.round(r.dist/10)/100;
   return {v:1,w:r.free?null:r.w,k:r.free?null:r.k,date:iso(st),time:st.toTimeString().slice(0,5),km,totSec:Math.round(r.active),
     segs:r.free?undefined:segs,splits:r.splits.concat(r.splitTail?[r.splitTail]:[]),splitLast:Math.round((r.dist/1000-r.splits.length)*100)/100,
-    vRun:rs>30&&rk>0?Math.round(rk/(rs/3600)*10)/10:undefined,maxRun:r.free?Math.round(r.active):Math.max(0,...segs.filter(x=>x.t==="run").map(x=>x.s)),track,dur:Math.round((r.free?r.active:rs)/60)};
+    vRun:rs>30&&rk>0?Math.round(rk/(rs/3600)*10)/10:undefined,maxRun:r.free?Math.round(r.active):Math.max(0,...segs.filter(x=>x.t==="run"||x.t==="fast").map(x=>x.s)),track,dur:Math.round((r.free?r.active:rs)/60)};
 }
 function code(){const j=JSON.stringify(payload());return "VLM1:"+btoa(unescape(encodeURIComponent(j)))}
 function summary(){
